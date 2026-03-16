@@ -1,0 +1,21 @@
+name: DSpace
+description: DSpace Test Repo
+dev_path: experimental
+role: project
+status: experimental
+tags:
+  - backend
+language: python
+setup:
+  - pip install -e .
+  - pre-commit install
+env:
+  - .env.example
+services:
+  - postgres
+  - redis
+depends_on:
+  - my-core-lib
+workspace: []
+update_strategy: []
+priority: []
