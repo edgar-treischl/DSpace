@@ -1,0 +1,11 @@
+.git
+.github
+datasets
+config
+scripts
+.env
+.env.example
+Dockerfile
+docker-compose.yml
+Makefile
+README.md

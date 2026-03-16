@@ -1,0 +1,23 @@
+# Angular UI server settings
+ui:
+  ssl: false
+  host: 0.0.0.0
+  port: 8080
+  nameSpace: /
+  rateLimiter:
+    windowMs: 60000
+    limit: 500
+    ipv6Subnet: 56
+
+# REST API endpoint (browser-facing)
+rest:
+  ssl: false
+  host: localhost
+  port: 80
+  nameSpace: /server
+  # Use the internal service endpoint during SSR to avoid proxy hops
+  ssrBaseUrl: http://web-api:8080/server
+
+# Keep SSR defaults but allow critical CSS inlining to remain off for perf
+ssr:
+  inlineCriticalCss: false

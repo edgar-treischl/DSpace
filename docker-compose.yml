@@ -1,0 +1,162 @@
+version: "3.9"
+
+x-dspace-env: &dspace-env
+  DSPACE_DB_HOST: db
+  DSPACE_DB_PORT: 5432
+  DSPACE_DB_NAME: dspace
+  DSPACE_DB_USERNAME: dspace
+  DSPACE_DB_PASSWORD: ${DSPACE_DB_PASSWORD}
+  DSPACE_SOLR_SERVER: http://search:8983/solr
+  SOLR_HOST: http://search:8983/solr
+  DSPACE_REDIS_HOST: cache
+  DSPACE_RABBITMQ_HOST: mq
+  DSPACE_S3_ENDPOINT: http://minio:9000
+  DSPACE_S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+  DSPACE_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+  DSPACE_S3_BUCKET: ${MINIO_BUCKET}
+  DSPACE_BASE_URL: ${DSPACE_BASE_URL}
+  DSPACE_ALLOW_ORIGIN: "*"
+  JAVA_OPTS: "-Xms128m -Xmx512m -Dsolr.server=http://search:8983/solr -Ddb.url=jdbc:postgresql://db:5432/dspace -Ddb.username=dspace -Ddb.password=${DSPACE_DB_PASSWORD}"
+  DSPACE_ADMIN_EMAIL: ${DSPACE_ADMIN_EMAIL}
+  DSPACE_ADMIN_PASSWORD: ${DSPACE_ADMIN_PASSWORD}
+  DSPACE_ADMIN_FIRST: ${DSPACE_ADMIN_FIRST}
+  DSPACE_ADMIN_LAST: ${DSPACE_ADMIN_LAST}
+  DSPACE_COLLECTION_HANDLE: ${DSPACE_COLLECTION_HANDLE}
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dspace
+      POSTGRES_USER: dspace
+      POSTGRES_PASSWORD: ${DSPACE_DB_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dspace -d dspace"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  search:
+    image: dspace/dspace-solr:latest
+    restart: unless-stopped
+    volumes:
+      - solr-data:/var/solr
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8983/solr/"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  cache:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server","--save","60","1","--loglevel","warning"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mq:
+    image: rabbitmq:3.12-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:RELEASE.2024-02-26T09-33-48Z
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/9000'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  web-api:
+    build: .
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c", "java $$JAVA_OPTS -jar webapps/server-boot.jar"]
+    depends_on:
+      db:
+        condition: service_healthy
+      search:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      mq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment: *dspace-env
+    ports:
+      - "8000:8080"
+    volumes:
+      - dspace-assets:/dspace/assetstore
+      - ./config/local.cfg:/dspace/config/local.cfg:ro
+
+  web-ui:
+    image: dspace/dspace-angular:latest
+    restart: unless-stopped
+    entrypoint: ["npm", "run", "start:prod"]
+    depends_on:
+      web-api:
+        condition: service_started
+    environment:
+      NODE_OPTIONS: "--max_old_space_size=8192"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config/angular-config.yml:/app/config/config.yml:ro
+
+  worker:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      web-api:
+        condition: service_started
+    environment: *dspace-env
+    entrypoint: ["/bin/sh", "-c", "sleep infinity"]
+    volumes:
+      - dspace-assets:/dspace/assetstore
+      - ./config/local.cfg:/dspace/config/local.cfg:ro
+
+  nginx:
+    image: nginx:1.25-alpine
+    restart: unless-stopped
+    depends_on:
+      - web-ui
+      - web-api
+    ports:
+      - "80:80"
+    volumes:
+      - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
+
+volumes:
+  db-data:
+  solr-data:
+  minio-data:
+  rabbitmq-data:
+  dspace-assets:

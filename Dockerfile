@@ -1,0 +1,1 @@
+FROM dspace/dspace:latest

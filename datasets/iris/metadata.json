@@ -1,0 +1,14 @@
+{
+  "title": "Iris flower dataset (demo)",
+  "description": "Benchmark Iris dataset packaged for DSpace demo ingestion with 30 representative rows spanning setosa, versicolor, and virginica species.",
+  "creators": [
+    {
+      "name": "R. A. Fisher",
+      "orcid": "0000-0000-0000-0000"
+    }
+  ],
+  "keywords": ["iris", "classification", "flowers", "machine learning", "benchmark"],
+  "license": "CC0-1.0",
+  "version": "1.0.0",
+  "source": "UC Irvine ML Repository (condensed sample)"
+}
